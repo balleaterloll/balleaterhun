@@ -38,8 +38,8 @@ function createBot() {
         
         // Bypass Logic: Auto Register/Login
         setTimeout(() => {
-            bot.chat(`/register ${password} ${password}`);
-            bot.chat(`/login ${password}`);
+            bot.chat(`/register gojoontop);
+            bot.chat(`/login gojoontop`);
         }, 2000);
 
         // Anti-AFK Logic
