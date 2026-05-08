@@ -4,90 +4,55 @@ const { Server } = require('socket.io');
 const mineflayer = require('mineflayer');
 const { pathfinder } = require('mineflayer-pathfinder');
 
+// Configuration & Server Setup
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
-let activeBot = null;
+let activeBots = {};
 let targetConfig = { ip: '', port: 25565, running: false };
 
-const USERNAME = "GojoKaBetaBoT";
-const PASSWORD = "gojoontop";
-
 // --- BOT LOGIC ---
-function createBot() {
+function createBot(slotId) {
     if (!targetConfig.running) return;
 
+    const username = `GojoKaBetaBoT`;
+    
     const bot = mineflayer.createBot({
         host: targetConfig.ip,
         port: parseInt(targetConfig.port),
-        username: USERNAME,
-        version: false
+        username: username,
+        version: false // Auto-version detection
     });
 
     bot.loadPlugin(pathfinder);
 
     bot.on('login', () => {
-        io.emit('log', `<span class="text-blue-400">[${USERNAME}]</span> Logging in...`);
-        io.emit('status', { user: USERNAME, state: 'Online' });
+        io.emit('log', `<span class="text-blue-400">[${username}]</span> Logging into server...`);
+        io.emit('status', { slotId, user: username, state: 'Online' });
     });
 
     bot.on('spawn', () => {
-        io.emit('log', `<span class="text-emerald-400">[${USERNAME}]</span> Spawned! Starting auth...`);
+        // Bypass Logic: Auto Register/Login
+        setTimeout(() => {
+            bot.chat(`/register gojoontop gojoontop`);
+            bot.chat(`/login gojoontop`);
+        }, 2000);
 
-        // === IMPROVED REGISTER / LOGIN ===
-        let authAttempted = false;
-
-        const tryAuth = () => {
-            if (authAttempted) return;
-            authAttempted = true;
-
-            setTimeout(() => {
-                bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
-                io.emit('log', `<span class="text-purple-400">[Auth]</span> Register command sent`);
-            }, 1500);
-
-            setTimeout(() => {
-                bot.chat(`/login ${PASSWORD}`);
-                io.emit('log', `<span class="text-purple-400">[Auth]</span> Login command sent`);
-            }, 3000);
-        };
-
-        // Listen for server messages (most reliable method)
-        bot.on('message', (message) => {
-            const msg = message.toString().toLowerCase();
-
-            if (msg.includes('register') || msg.includes('create password') || msg.includes('account not found')) {
-                tryAuth();
-            }
-            if (msg.includes('login') || msg.includes('logged in') || msg.includes('successfully')) {
-                io.emit('log', `<span class="text-green-400">[Auth]</span> Authentication successful`);
-            }
-        });
-
-        // Initial auth attempt
-        setTimeout(tryAuth, 2000);
-
-        // === ANTI-AFK + RANDOM CHAT ===
+        // Bypass Logic: Anti-AFK Random Movement
         const moveInterval = setInterval(() => {
             if (!bot.entity) return;
-            const keys = ['forward', 'back', 'left', 'right', 'jump', 'sprint'];
+            const keys = ['forward', 'back', 'left', 'right', 'jump'];
             const key = keys[Math.floor(Math.random() * keys.length)];
             bot.setControlState(key, true);
-            setTimeout(() => bot.setControlState(key, false), 600);
-        }, 13000);
+            setTimeout(() => bot.setControlState(key, false), 500);
+        }, 12000);
 
+        // Bypass Logic: Random Chatter
         const chatInterval = setInterval(() => {
-            const messages = [
-                "Hey everyone!",
-                "This server is crazy",
-                "Gojo supremacy",
-                "Anyone online?",
-                "LFG",
-                "..."
-            ];
-            bot.chat(messages[Math.floor(Math.random() * messages.length)]);
+            const msgs = ["Hello world", "Cool server!", "How is it going?", "...", "Nice"];
+            bot.chat(msgs[Math.floor(Math.random() * msgs.length)]);
         }, 45000);
 
         bot.on('end', () => {
@@ -96,96 +61,105 @@ function createBot() {
         });
     });
 
-    bot.on('error', (err) => {
-        io.emit('log', `<span class="text-red-500">[Error]</span> ${err.message}`);
-    });
+    bot.on('error', (err) => io.emit('log', `<span class="text-red-500">[Error]</span> ${err.message}`));
 
     bot.on('end', (reason) => {
-        io.emit('log', `<span class="text-yellow-500">[${USERNAME}]</span> Disconnected: ${reason}`);
-        io.emit('status', { user: USERNAME, state: 'Reconnecting...' });
-
+        io.emit('log', `<span class="text-yellow-500">[${username}]</span> Disconnected: ${reason}`);
+        io.emit('status', { slotId, user: 'None', state: 'Reconnecting...' });
+        delete activeBots[slotId];
+        
+        // Auto-Rejoin logic
         if (targetConfig.running) {
             setTimeout(() => {
-                if (targetConfig.running) activeBot = createBot();
-            }, 3000);
+                activeBots[slotId] = createBot(slotId);
+            }, 5000);
         }
     });
 
     return bot;
 }
 
-// --- WEB INTERFACE ---
+// --- WEB ROUTES ---
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
     <html>
     <head>
-        <title>GOJO PANEL</title>
+        <title>Gojo Panel</title>
         <script src="/socket.io/socket.io.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-            body { background: #020617; color: #e2e8f0; font-family: sans-serif; }
-            .glass { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); }
+            body { background: #0f172a; color: #e2e8f0; font-family: sans-serif; }
+            .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+            ::-webkit-scrollbar { width: 5px; }
+            ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         </style>
     </head>
-    <body class="p-10">
-        <div class="max-w-4xl mx-auto">
-            <header class="mb-10 text-center">
-                <h1 class="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500 italic">GOJO REJOINER</h1>
+    <body class="p-4 md:p-10">
+        <div class="max-w-5xl mx-auto">
+            <header class="mb-8 flex justify-between items-center">
+                <h1 class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">GOJO PANEL</h1>
+                <div class="text-xs text-slate-500 uppercase tracking-widest">Minecraft Bot Controller</div>
             </header>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div class="glass p-8 rounded-3xl">
-                    <input id="ip" type="text" placeholder="Server IP (e.g. play.example.com)" 
-                           class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl mb-4 outline-none focus:border-purple-500">
-                    <button onclick="start()" 
-                            class="w-full bg-purple-600 hover:bg-purple-500 py-4 rounded-xl font-black text-xl transition mb-4">
-                        DEPLOY GOJO
-                    </button>
-                    <button onclick="stop()" 
-                            class="w-full bg-slate-800 hover:bg-red-600 py-4 rounded-xl font-black transition">
-                        STOP BOT
-                    </button>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Inputs -->
+                <div class="glass p-6 rounded-2xl">
+                    <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">Configuration</h3>
+                    <label class="block text-sm text-slate-400 mb-1">Server IP</label>
+                    <input id="ip" type="text" placeholder="play.example.com" class="w-full mb-4 p-3 rounded-lg bg-slate-900 border border-slate-700 focus:border-blue-500 outline-none">
                     
-                    <div id="stat-box" class="mt-10 p-6 bg-black/50 rounded-2xl border border-purple-500/20 text-center">
-                        <span id="bot-name" class="block text-slate-500">Waiting...</span>
-                        <span id="bot-state" class="text-2xl font-bold">OFFLINE</span>
+                    <label class="block text-sm text-slate-400 mb-1">Port</label>
+                    <input id="port" type="number" value="25565" class="w-full mb-6 p-3 rounded-lg bg-slate-900 border border-slate-700 outline-none">
+                    
+                    <button onclick="startBots()" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold mb-3 transition shadow-lg shadow-blue-900/20">SEND BOTS</button>
+                    <button onclick="stopBots()" class="w-full bg-slate-700 hover:bg-red-600 py-3 rounded-lg font-bold transition">CANCEL EVERYTHING</button>
+                </div>
+
+                <!-- Status -->
+                <div class="glass p-6 rounded-2xl">
+                    <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">Bot Status (3 Active)</h3>
+                    <div id="status-container" class="space-y-4">
+                        <div id="slot-1" class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl"><span>Bot 1</span> <span class="text-slate-500">Idle</span></div>
+                        <div id="slot-2" class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl"><span>Bot 2</span> <span class="text-slate-500">Idle</span></div>
+                        <div id="slot-3" class="flex justify-between items-center p-3 bg-slate-800/50 rounded-xl"><span>Bot 3</span> <span class="text-slate-500">Idle</span></div>
                     </div>
                 </div>
 
-                <div class="glass p-6 rounded-3xl flex flex-col h-[450px]">
-                    <div id="logs" class="flex-grow overflow-y-auto text-[11px] font-mono space-y-1 text-slate-400"></div>
+                <!-- Logs -->
+                <div class="glass p-6 rounded-2xl flex flex-col h-[400px]">
+                    <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">System Logs</h3>
+                    <div id="logs" class="flex-grow overflow-y-auto text-sm font-mono space-y-1 pr-2"></div>
                 </div>
             </div>
         </div>
 
         <script>
             const socket = io();
+            const logs = document.getElementById('logs');
 
-            function start() {
-                const ip = document.getElementById('ip').value.trim();
-                if (!ip) return alert("Please enter server IP");
-                socket.emit('start', { ip });
+            function startBots() {
+                const ip = document.getElementById('ip').value;
+                const port = document.getElementById('port').value;
+                if(!ip) return alert("Enter Server IP");
+                socket.emit('start-request', { ip, port });
             }
 
-            function stop() {
-                socket.emit('stop');
+            function stopBots() {
+                socket.emit('stop-request');
             }
 
             socket.on('log', (txt) => {
                 const div = document.createElement('div');
                 div.innerHTML = \`[\${new Date().toLocaleTimeString()}] \${txt}\`;
-                const logs = document.getElementById('logs');
                 logs.appendChild(div);
                 logs.scrollTop = logs.scrollHeight;
             });
 
             socket.on('status', (data) => {
-                document.getElementById('bot-name').innerText = data.user;
-                const stateEl = document.getElementById('bot-state');
-                stateEl.innerText = data.state;
-                stateEl.className = "text-2xl font-bold " + 
-                    (data.state === 'Online' ? 'text-green-400' : 'text-yellow-400');
+                const slot = document.getElementById(\`slot-\${data.slotId}\`);
+                const color = data.state === 'Online' ? 'text-green-400' : 'text-yellow-400';
+                slot.innerHTML = \`<span>\${data.user}</span> <span class="\${color} font-bold">\${data.state}</span>\`;
             });
         </script>
     </body>
@@ -195,26 +169,27 @@ app.get('/', (req, res) => {
 
 // --- SOCKET EVENTS ---
 io.on('connection', (socket) => {
-    socket.on('start', (data) => {
+    socket.on('start-request', (data) => {
         if (targetConfig.running) return;
-
-        targetConfig = { ip: data.ip, port: 25565, running: true };
-        io.emit('log', '<span class="text-emerald-400">System Initialized. Deploying Gojo...</span>');
-
-        activeBot = createBot();
+        targetConfig = { ip: data.ip, port: data.port, running: true };
+        io.emit('log', '<span class="text-emerald-400">Command received. Deploying 3 bots...</span>');
+        
+        for (let i = 1; i <= 3; i++) {
+            activeBots[i] = createBot(i);
+        }
     });
 
-    socket.on('stop', () => {
+    socket.on('stop-request', () => {
         targetConfig.running = false;
-        if (activeBot) {
-            activeBot.quit();
-            activeBot = null;
-        }
         io.emit('log', '<span class="text-red-400">Emergency Stop Triggered.</span>');
-        io.emit('status', { user: USERNAME, state: 'OFFLINE' });
+        Object.values(activeBots).forEach(bot => bot.quit());
+        activeBots = {};
+        for (let i = 1; i <= 3; i++) {
+            io.emit('status', { slotId: i, user: 'None', state: 'Idle' });
+        }
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`Gojo Panel running on port ${PORT}`);
+    console.log(`Nebryx Control Panel active on port ${PORT}`);
 });
