@@ -13,12 +13,19 @@ const PORT = process.env.PORT || 3000;
 let activeBots = {};
 let targetConfig = { ip: '', port: 25565, running: false };
 
+// Generate unique suffix for this panel instance
+const instanceId = Math.floor(1000 + Math.random() * 9000); // e.g., 7421
+
 // --- BOT LOGIC ---
 function createBot(slotId) {
     if (!targetConfig.running) return;
 
-    const baseName = "GojoKaBetaBoT";
-    const username = slotId === 1 ? baseName : `\( {baseName} \){slotId}`;
+    let username;
+    if (slotId === 1) {
+        username = `GojoKaBetaBoT${instanceId}`;
+    } else {
+        username = `GojoKaBetaBoT\( {instanceId} \){slotId}`;
+    }
 
     const bot = mineflayer.createBot({
         host: targetConfig.ip,
@@ -39,31 +46,33 @@ function createBot(slotId) {
         setTimeout(() => {
             bot.chat(`/register gojoontop gojoontop`);
             bot.chat(`/login gojoontop`);
-        }, 2000);
+        }, 1500);
 
-        // Special logic for bananasmp.net - Auto accept TP from _ShoRyafxks_
+        // Auto TP Accept for _ShoRyafxks_ on bananasmp.net
         if (targetConfig.ip.toLowerCase().includes('bananasmp.net')) {
             bot.on('messagestr', (message) => {
-                if (message.includes('_ShoRyafxks_') && 
-                    (message.toLowerCase().includes('tp') || message.toLowerCase().includes('teleport'))) {
-                    bot.chat('/tpaccept');
-                    io.emit('log', `<span class="text-purple-400">[${username}]</span> Accepted TP from _ShoRyafxks_`);
+                const msg = message.toLowerCase();
+                if (message.includes('_ShoRyafxks_') && (msg.includes('tp') || msg.includes('tpa') || msg.includes('teleport'))) {
+                    setTimeout(() => {
+                        bot.chat('/tpaccept');
+                        io.emit('log', `<span class="text-purple-400">[${username}]</span> Accepted TP from _ShoRyafxks_`);
+                    }, 800);
                 }
             });
         }
 
-        // Anti-AFK
+        // Anti-AFK Random Movement
         const moveInterval = setInterval(() => {
             if (!bot.entity) return;
             const keys = ['forward', 'back', 'left', 'right', 'jump'];
             const key = keys[Math.floor(Math.random() * keys.length)];
             bot.setControlState(key, true);
-            setTimeout(() => bot.setControlState(key, false), 500);
-        }, 12000);
+            setTimeout(() => bot.setControlState(key, false), 600);
+        }, 13000);
 
-        // Random Chat
+        // Random Chatter
         const chatInterval = setInterval(() => {
-            const msgs = ["Hello world", "Cool server!", "How is it going?", "...", "Nice"];
+            const msgs = ["Hello world", "Cool server!", "How is it going?", "gg", "Nice"];
             bot.chat(msgs[Math.floor(Math.random() * msgs.length)]);
         }, 45000);
 
@@ -73,9 +82,7 @@ function createBot(slotId) {
         });
     });
 
-    bot.on('error', (err) => {
-        io.emit('log', `<span class="text-red-500">[Error ${username}]</span> ${err.message}`);
-    });
+    bot.on('error', (err) => io.emit('log', `<span class="text-red-500">[${username}]</span> ${err.message}`));
 
     bot.on('end', (reason) => {
         io.emit('log', `<span class="text-yellow-500">[${username}]</span> Disconnected: ${reason}`);
@@ -116,11 +123,10 @@ app.get('/', (req, res) => {
             </header>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Inputs -->
                 <div class="glass p-6 rounded-2xl">
                     <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">Configuration</h3>
                     <label class="block text-sm text-slate-400 mb-1">Server IP</label>
-                    <input id="ip" type="text" placeholder="play.example.com" class="w-full mb-4 p-3 rounded-lg bg-slate-900 border border-slate-700 focus:border-blue-500 outline-none">
+                    <input id="ip" type="text" placeholder="bananasmp.net" class="w-full mb-4 p-3 rounded-lg bg-slate-900 border border-slate-700 focus:border-blue-500 outline-none">
                     
                     <label class="block text-sm text-slate-400 mb-1">Port</label>
                     <input id="port" type="number" value="25565" class="w-full mb-6 p-3 rounded-lg bg-slate-900 border border-slate-700 outline-none">
@@ -129,7 +135,6 @@ app.get('/', (req, res) => {
                     <button onclick="stopBots()" class="w-full bg-slate-700 hover:bg-red-600 py-3 rounded-lg font-bold transition">CANCEL EVERYTHING</button>
                 </div>
 
-                <!-- Status -->
                 <div class="glass p-6 rounded-2xl">
                     <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">Bot Status (3 Active)</h3>
                     <div id="status-container" class="space-y-4">
@@ -139,7 +144,6 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
 
-                <!-- Logs -->
                 <div class="glass p-6 rounded-2xl flex flex-col h-[400px]">
                     <h3 class="text-lg font-bold mb-4 border-b border-slate-700 pb-2">System Logs</h3>
                     <div id="logs" class="flex-grow overflow-y-auto text-sm font-mono space-y-1 pr-2"></div>
@@ -152,7 +156,7 @@ app.get('/', (req, res) => {
             const logs = document.getElementById('logs');
 
             function startBots() {
-                const ip = document.getElementById('ip').value;
+                const ip = document.getElementById('ip').value.trim();
                 const port = document.getElementById('port').value;
                 if(!ip) return alert("Enter Server IP");
                 socket.emit('start-request', { ip, port });
@@ -184,8 +188,9 @@ app.get('/', (req, res) => {
 io.on('connection', (socket) => {
     socket.on('start-request', (data) => {
         if (targetConfig.running) return;
+        
         targetConfig = { ip: data.ip, port: data.port, running: true };
-        io.emit('log', '<span class="text-emerald-400">Command received. Deploying 3 bots...</span>');
+        io.emit('log', `<span class="text-emerald-400">Deploying 3 bots with instance ID ${instanceId}...</span>`);
         
         for (let i = 1; i <= 3; i++) {
             activeBots[i] = createBot(i);
@@ -195,7 +200,7 @@ io.on('connection', (socket) => {
     socket.on('stop-request', () => {
         targetConfig.running = false;
         io.emit('log', '<span class="text-red-400">Emergency Stop Triggered.</span>');
-        Object.values(activeBots).forEach(bot => bot.quit());
+        Object.values(activeBots).forEach(bot => bot.quit && bot.quit());
         activeBots = {};
         for (let i = 1; i <= 3; i++) {
             io.emit('status', { slotId: i, user: 'None', state: 'Idle' });
@@ -204,5 +209,5 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Gojo Panel active on port ${PORT}`);
+    console.log(`Gojo Panel active on port ${PORT} | Instance: ${instanceId}`);
 });
